@@ -98,12 +98,21 @@ export default function ProdeLaRondaApp() {
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans pb-20 selection:bg-emerald-500/30">
       <Header userProfile={userProfile} />
       <main className="max-w-4xl mx-auto p-4 mt-4">
-        <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
+        <Navigation 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab}
+        user={user} 
+        />
         {activeTab === 'fixture' && (
           <FixtureTab matches={matches} myPredictions={myPredictions} handlePredictionChange={handlePredictionChange} savePrediction={savePrediction} />
         )}
         {activeTab === 'ranking' && <RankingTab ranking={ranking} currentUserUid={user.uid} />}
-        {activeTab === 'admin' && <AdminTab matches={matches} />}
+        {activeTab === 'admin' && user.uid === 'Tss5ESOFNtKbNX4NyGwIPKP6uMcv2' && <AdminTab matches={matches} />}
+        {activeTab === 'admin' && user.uid !== 'ss5ESOFNtKbNX4NyGwIPKP6uMcv2' && (
+        <div className="text-center p-10 text-slate-500">
+          🚫 Acceso denegado. Solo para administradores.
+        </div>
+)}
       </main>
     </div>
   );
