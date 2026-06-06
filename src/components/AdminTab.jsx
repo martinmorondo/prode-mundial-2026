@@ -4,11 +4,9 @@ import { Globe2, ShieldAlert } from 'lucide-react';
 import { db, appId } from '../lib/firebase'; 
 
 export default function AdminTab({ matches }) {
-  const [apiUrl, setApiUrl] = useState('http://localhost:3050');
   const [isSyncing, setIsSyncing] = useState(false);
 
   const syncFixturesFromAPI = async () => {
-    if (!apiUrl) return alert("Ingresa la URL de la API.");
     setIsSyncing(true);
 
     const teamMap = {
@@ -63,7 +61,7 @@ export default function AdminTab({ matches }) {
     };
 
     try {
-      const res = await fetch(`${apiUrl}/get/games`);
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/get/games`);
       const json = await res.json();
       const dataList = json.data || json.games || json;
 
@@ -138,15 +136,10 @@ export default function AdminTab({ matches }) {
             <Globe2 className="w-6 h-6" />
           </div>
           <div className="w-full">
-            <h3 className="text-xl font-bold text-white mb-2">Conexión con tu API (Node.js)</h3>
-            <p className="text-sm text-slate-400 mb-4">Ingresa la URL donde tienes alojado el backend.</p>
-            <input 
-              type="url" 
-              value={apiUrl}
-              onChange={(e) => setApiUrl(e.target.value)}
-              placeholder="http://localhost:3050"
-              className="w-full bg-slate-950 border-2 border-slate-700 rounded-xl px-4 py-3 text-white mb-4 focus:border-purple-500 outline-none transition-colors font-mono"
-            />
+            <h3 className="text-xl font-bold text-white mb-2">Sincronización de Datos</h3>
+            <p className="text-sm text-slate-400 mb-6">
+              Actualiza el fixture y los resultados desde el servidor central.
+            </p>
             <button 
               onClick={syncFixturesFromAPI}
               disabled={isSyncing}
