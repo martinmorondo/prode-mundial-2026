@@ -107,8 +107,8 @@ export default function ProdeLaRondaApp() {
           <FixtureTab matches={matches} myPredictions={myPredictions} handlePredictionChange={handlePredictionChange} savePrediction={savePrediction} />
         )}
         {activeTab === 'ranking' && <RankingTab ranking={ranking} currentUserUid={user.uid} />}
-        {activeTab === 'admin' && user.uid === 'Tss5ESOFNtKbNX4NyGwIPKP6uMcv2' && <AdminTab matches={matches} />}
-        {activeTab === 'admin' && user.uid !== 'ss5ESOFNtKbNX4NyGwIPKP6uMcv2' && (
+        {activeTab === 'admin' && user.uid === 'T2Tj8HHXMcYQXljBKBEI4UV9Wmnr1' && <AdminTab matches={matches} />}
+        {activeTab === 'admin' && user.uid !== '2Tj8HHXMcYQXljBKBEI4UV9Wmnr1' && (
         <div className="text-center p-10 text-slate-500">
           🚫 Acceso denegado. Solo para administradores.
         </div>

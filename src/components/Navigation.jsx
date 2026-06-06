@@ -8,7 +8,7 @@ export default function Navigation({ activeTab, setActiveTab, user }) {
   const tabs = [
     { id: 'fixture', icon: Calendar, label: 'Pronósticos' },
     { id: 'ranking', icon: Activity, label: 'Tabla General' },
-    user?.uid === 'ss5ESOFNtKbNX4NyGwIPKP6uMcv2' && { id: 'admin', icon: Settings, label: 'Admin' }
+    user?.uid === '2Tj8HHXMcYQXljBKBEI4UV9Wmnr1' && { id: 'admin', icon: Settings, label: 'Admin' }
   ].filter(Boolean); // .filter(Boolean) elimina el 'false' si el usuario no es admin
 
   return (
