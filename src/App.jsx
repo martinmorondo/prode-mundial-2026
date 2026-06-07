@@ -83,7 +83,7 @@ export default function ProdeLaRondaApp() {
   if (!user) {
     return <LoginScreen onAuthAction={handleAuthAction} isSaving={isSavingProfile} />;
   }
-
+console.log("Estado actual:", { loadingDb, userProfile, user });
   if (loadingDb || !userProfile) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-emerald-400 font-mono">
@@ -107,8 +107,8 @@ export default function ProdeLaRondaApp() {
           <FixtureTab matches={matches} myPredictions={myPredictions} handlePredictionChange={handlePredictionChange} savePrediction={savePrediction} />
         )}
         {activeTab === 'ranking' && <RankingTab ranking={ranking} currentUserUid={user.uid} />}
-        {activeTab === 'admin' && user.uid === 'T2Tj8HHXMcYQXljBKBEI4UV9Wmnr1' && <AdminTab matches={matches} />}
-        {activeTab === 'admin' && user.uid !== '2Tj8HHXMcYQXljBKBEI4UV9Wmnr1' && (
+        {activeTab === 'admin' && user.uid === 'fOz55g8nrCYI8onReC60p8SMX1S2' && <AdminTab matches={matches} />}
+        {activeTab === 'admin' && user.uid !== 'fOz55g8nrCYI8onReC60p8SMX1S2' && (
         <div className="text-center p-10 text-slate-500">
           🚫 Acceso denegado. Solo para administradores.
         </div>

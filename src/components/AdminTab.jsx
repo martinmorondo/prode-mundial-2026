@@ -3,7 +3,7 @@ import { doc, setDoc, writeBatch } from 'firebase/firestore';
 import { Globe2, ShieldAlert } from 'lucide-react';
 import { db, appId } from '../lib/firebase'; 
 
-export default function AdminTab({ matches }) {
+export default function AdminTab({ matches = [] }) {
   const [isSyncing, setIsSyncing] = useState(false);
 
   const syncFixturesFromAPI = async () => {
@@ -126,7 +126,7 @@ export default function AdminTab({ matches }) {
       console.error(e);
     }
   };
-
+console.log("Datos de matches recibidos:", matches);
   return (
     <div className="space-y-6 animate-in fade-in duration-300 slide-in-from-bottom-4">
       {/* Caja de Sincronización */}

@@ -5,25 +5,31 @@ import {
   createUserWithEmailAndPassword,
   signOut
 } from "firebase/auth";
-import { getDoc } from "firebase/firestore";
-import { auth, getPublicDoc } from "../lib/firebase";
+import { getDoc, doc } from "firebase/firestore"; 
+import { auth, db, appId } from "../lib/firebase"; 
 
 export function useAuth() {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
-  const [loadingAuth, setLoadingAuth] = useState(true); // Controla la carga inicial
+  const [loadingAuth, setLoadingAuth] = useState(true);
 
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser); // Asegúrate de actualizar el estado del usuario
+      
       if (currentUser) {
         try {
-          const docSnap = await getDoc(getPublicDoc("users", currentUser.uid));
+          // Ahora 'db', 'appId' y 'doc' están definidos gracias a los imports
+          const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUser.uid);
+          const docSnap = await getDoc(userRef);
+          
           if (docSnap.exists()) {
             setUserProfile(docSnap.data());
+          } else {
+            console.warn("El usuario logueado no tiene perfil en Firestore");
           }
-        } catch (e) {
-          console.error("Error leyendo perfil:", e);
+        } catch (error) {
+          console.error("Error al cargar perfil:", error);
         }
       } else {
         setUserProfile(null);
@@ -31,7 +37,7 @@ export function useAuth() {
       setLoadingAuth(false);
     });
 
-    return unsubscribeAuth;
+    return unsubscribe;
   }, []);
 
   const loginWithEmail = (email, password) => signInWithEmailAndPassword(auth, email, password);
