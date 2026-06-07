@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { doc, setDoc, writeBatch } from 'firebase/firestore';
 import { Globe2, ShieldAlert } from 'lucide-react';
+import ReactCountryFlag from 'react-country-flag'; // <-- 1. Importamos la librería
 import { db, appId } from '../lib/firebase'; 
 
 export default function AdminTab({ matches = [] }) {
@@ -9,55 +10,56 @@ export default function AdminTab({ matches = [] }) {
   const syncFixturesFromAPI = async () => {
     setIsSyncing(true);
 
+    // 2. Cambiamos 'flag' por 'code' con los códigos ISO oficiales
     const teamMap = {
-      "mexico": { name: "Mexico", flag: "🇲🇽" },
-      "south africa": { name: "South Africa", flag: "🇿🇦" },
-      "south korea": { name: "South Korea", flag: "🇰🇷" },
-      "czech republic": { name: "Czech Republic", flag: "🇨🇿" },
-      "canada": { name: "Canada", flag: "🇨🇦" },
-      "bosnia and herzegovina": { name: "Bosnia and Herzegovina", flag: "🇧🇦" },
-      "united states": { name: "United States", flag: "🇺🇸" },
-      "paraguay": { name: "Paraguay", flag: "🇵🇾" },
-      "haiti": { name: "Haiti", flag: "🇭🇹" },
-      "scotland": { name: "Scotland", flag: "🏴󠁧󠁢󠁳󠁣󠁴󠁿" },
-      "australia": { name: "Australia", flag: "🇦🇺" },
-      "turkey": { name: "Turkey", flag: "🇹🇷" },
-      "brazil": { name: "Brazil", flag: "🇧🇷" },
-      "morocco": { name: "Morocco", flag: "🇲🇦" },
-      "qatar": { name: "Qatar", flag: "🇶🇦" },
-      "switzerland": { name: "Switzerland", flag: "🇨🇭" },
-      "ivory coast": { name: "Ivory Coast", flag: "🇨🇮" },
-      "ecuador": { name: "Ecuador", flag: "🇪🇨" },
-      "germany": { name: "Germany", flag: "🇩🇪" },
-      "curaçao": { name: "Curaçao", flag: "🇨🇼" },
-      "netherlands": { name: "Netherlands", flag: "🇳🇱" },
-      "japan": { name: "Japan", flag: "🇯🇵" },
-      "sweden": { name: "Sweden", flag: "🇸🇪" },
-      "tunisia": { name: "Tunisia", flag: "🇹🇳" },
-      "belgium": { name: "Belgium", flag: "🇧🇪" },
-      "egypt": { name: "Egypt", flag: "🇪🇬" },
-      "iran": { name: "Iran", flag: "🇮🇷" },
-      "new zealand": { name: "New Zealand", flag: "🇳🇿" },
-      "spain": { name: "Spain", flag: "🇪🇸" },
-      "cape verde": { name: "Cape Verde", flag: "🇨🇻" },
-      "saudi arabia": { name: "Saudi Arabia", flag: "🇸🇦" },
-      "uruguay": { name: "Uruguay", flag: "🇺🇾" },
-      "france": { name: "France", flag: "🇫🇷" },
-      "senegal": { name: "Senegal", flag: "🇸🇳" },
-      "iraq": { name: "Iraq", flag: "🇮🇶" },
-      "norway": { name: "Norway", flag: "🇳🇴" },
-      "algeria": { name: "Algeria", flag: "🇩🇿" },
-      "austria": { name: "Austria", flag: "🇦🇹" },
-      "jordan": { name: "Jordan", flag: "🇯🇴" },
-      "portugal": { name: "Portugal", flag: "🇵🇹" },
-      "democratic republic of the congo": { name: "DR Congo", flag: "🇨🇩" },
-      "uzbekistan": { name: "Uzbekistan", flag: "🇺🇿" },
-      "colombia": { name: "Colombia", flag: "🇨🇴" },
-      "panama": { name: "Panama", flag: "🇵🇦" },
-      "croatia": { name: "Croatia", flag: "🇭🇷" },
-      "ghana": { name: "Ghana", flag: "🇬🇭" },
-      "england": { name: "England", flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
-      "argentina": { name: "Argentina", flag: "🇦🇷" }
+      "mexico": { name: "Mexico", code: "MX" },
+      "south africa": { name: "South Africa", code: "ZA" },
+      "south korea": { name: "South Korea", code: "KR" },
+      "czech republic": { name: "Czech Republic", code: "CZ" },
+      "canada": { name: "Canada", code: "CA" },
+      "bosnia and herzegovina": { name: "Bosnia and Herzegovina", code: "BA" },
+      "united states": { name: "United States", code: "US" },
+      "paraguay": { name: "Paraguay", code: "PY" },
+      "haiti": { name: "Haiti", code: "HT" },
+      "scotland": { name: "Scotland", code: "GB-SCT" },
+      "australia": { name: "Australia", code: "AU" },
+      "turkey": { name: "Turkey", code: "TR" },
+      "brazil": { name: "Brazil", code: "BR" },
+      "morocco": { name: "Morocco", code: "MA" },
+      "qatar": { name: "Qatar", code: "QA" },
+      "switzerland": { name: "Switzerland", code: "CH" },
+      "ivory coast": { name: "Ivory Coast", code: "CI" },
+      "ecuador": { name: "Ecuador", code: "EC" },
+      "germany": { name: "Germany", code: "DE" },
+      "curaçao": { name: "Curaçao", code: "CW" },
+      "netherlands": { name: "Netherlands", code: "NL" },
+      "japan": { name: "Japan", code: "JP" },
+      "sweden": { name: "Sweden", code: "SE" },
+      "tunisia": { name: "Tunisia", code: "TN" },
+      "belgium": { name: "Belgium", code: "BE" },
+      "egypt": { name: "Egypt", code: "EG" },
+      "iran": { name: "Iran", code: "IR" },
+      "new zealand": { name: "New Zealand", code: "NZ" },
+      "spain": { name: "Spain", code: "ES" },
+      "cape verde": { name: "Cape Verde", code: "CV" },
+      "saudi arabia": { name: "Saudi Arabia", code: "SA" },
+      "uruguay": { name: "Uruguay", code: "UY" },
+      "france": { name: "France", code: "FR" },
+      "senegal": { name: "Senegal", code: "SN" },
+      "iraq": { name: "Iraq", code: "IQ" },
+      "norway": { name: "Norway", code: "NO" },
+      "algeria": { name: "Algeria", code: "DZ" },
+      "austria": { name: "Austria", code: "AT" },
+      "jordan": { name: "Jordan", code: "JO" },
+      "portugal": { name: "Portugal", code: "PT" },
+      "democratic republic of the congo": { name: "DR Congo", code: "CD" },
+      "uzbekistan": { name: "Uzbekistan", code: "UZ" },
+      "colombia": { name: "Colombia", code: "CO" },
+      "panama": { name: "Panama", code: "PA" },
+      "croatia": { name: "Croatia", code: "HR" },
+      "ghana": { name: "Ghana", code: "GH" },
+      "england": { name: "England", code: "GB-ENG" },
+      "argentina": { name: "Argentina", code: "AR" }
     };
 
     try {
@@ -76,8 +78,9 @@ export default function AdminTab({ matches = [] }) {
         const homeNameRaw = (m.home_team_name_en || "").trim().toLowerCase();
         const awayNameRaw = (m.away_team_name_en || "").trim().toLowerCase();
 
-        const homeData = teamMap[homeNameRaw] || { name: m.home_team_name_en || m.home_team_label || "Local", flag: "⚽" };
-        const awayData = teamMap[awayNameRaw] || { name: m.away_team_name_en || m.away_team_label || "Visitante", flag: "⚽" };
+        // 3. Si no encuentra el país, usamos 'UN' (United Nations) como fallback visual
+        const homeData = teamMap[homeNameRaw] || { name: m.home_team_name_en || m.home_team_label || "Local", code: "UN" };
+        const awayData = teamMap[awayNameRaw] || { name: m.away_team_name_en || m.away_team_label || "Visitante", code: "UN" };
 
         const matchData = {
           id: matchId,
@@ -86,8 +89,8 @@ export default function AdminTab({ matches = [] }) {
           date: m.local_date || "Fecha por definir",
           home: homeData.name,
           away: awayData.name,
-          flagH: homeData.flag,
-          flagA: awayData.flag,
+          flagH: homeData.code, // <-- Pasamos el código a Firebase
+          flagA: awayData.code, // <-- Pasamos el código a Firebase
           status: (m.finished === 'TRUE' || m.finished === true || m.time_elapsed === 'finished') ? 'finished' : 'pending',
           realHomeScore: parseInt(m.home_score, 10) || 0,
           realAwayScore: parseInt(m.away_score, 10) || 0
@@ -126,10 +129,9 @@ export default function AdminTab({ matches = [] }) {
       console.error(e);
     }
   };
-console.log("Datos de matches recibidos:", matches);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300 slide-in-from-bottom-4">
-      {/* Caja de Sincronización */}
       <div className="bg-slate-900 p-6 rounded-2xl border border-purple-500/30 shadow-lg">
         <div className="flex items-start gap-4 flex-col sm:flex-row">
           <div className="p-3 bg-purple-500/20 rounded-xl text-purple-400 shrink-0">
@@ -151,7 +153,6 @@ console.log("Datos de matches recibidos:", matches);
         </div>
       </div>
 
-      {/* Caja de Carga Manual */}
       <div className="bg-slate-900 p-6 rounded-2xl border border-slate-700 shadow-lg">
         <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
           <ShieldAlert className="w-5 h-5 text-yellow-500" /> Carga Manual (Respaldo)
@@ -163,8 +164,11 @@ console.log("Datos de matches recibidos:", matches);
             <div key={match.id} className="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="font-bold text-emerald-400 text-sm md:w-1/3">
                 {match.group} 
-                <span className="text-slate-500 block text-xs">
-                  {match.flagH} {match.home} vs {match.away} {match.flagA}
+                <span className="text-slate-500 flex items-center gap-2 text-xs mt-1">
+                  {/* 4. Aplicamos las banderas visuales en el panel admin */}
+                  <ReactCountryFlag countryCode={match.flagH} svg style={{ width: '1.2em', height: '1.2em', borderRadius: '2px' }}/> 
+                  {match.home} vs {match.away} 
+                  <ReactCountryFlag countryCode={match.flagA} svg style={{ width: '1.2em', height: '1.2em', borderRadius: '2px' }}/>
                 </span>
               </div>
               

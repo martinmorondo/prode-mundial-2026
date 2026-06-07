@@ -1,35 +1,44 @@
 import React, { useState } from 'react';
-import { Globe2, LogIn, UserPlus } from 'lucide-react';
+import { LogIn, UserPlus } from 'lucide-react'; // Quitamos Globe2[cite: 10]
+import logo from '../assets/logo-rondero.webp'; // Importamos tu logo
 
-const AVATARS = ['⚽', '🏆', '🦁', '🦅', '🌪️', '🦈', '🦍', '🐉', '👽', '🤖'];
+const AVATARS = ['⚽', '🏆', '🦁', '🦅', '🌪️', '🦈', '🦍', '🐉', '👽', '🤖']; //[cite: 10]
 
-export default function LoginScreen({ onAuthAction, isSaving }) {
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [avatar, setAvatar] = useState('⚽');
+export default function LoginScreen({ onAuthAction, isSaving }) { //[cite: 10]
+  const [isRegistering, setIsRegistering] = useState(false); //[cite: 10]
+  const [email, setEmail] = useState(''); //[cite: 10]
+  const [password, setPassword] = useState(''); //[cite: 10]
+  const [name, setName] = useState(''); //[cite: 10]
+  const [avatar, setAvatar] = useState('⚽'); //[cite: 10]
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!email || !password) return;
+  const handleSubmit = (e) => { //[cite: 10]
+    e.preventDefault(); //[cite: 10]
+    if (!email || !password) return; //[cite: 10]
     
-    onAuthAction({
-      type: isRegistering ? 'register' : 'login',
-      email,
-      password,
-      name: name.trim(),
-      avatar
-    });
-  };
+    onAuthAction({ //[cite: 10]
+      type: isRegistering ? 'register' : 'login', //[cite: 10]
+      email, //[cite: 10]
+      password, //[cite: 10]
+      name: name.trim(), //[cite: 10]
+      avatar //[cite: 10]
+    }); //[cite: 10]
+  }; //[cite: 10]
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-slate-200">
       <div className="w-full max-w-md bg-slate-900 p-8 rounded-2xl border border-emerald-500/30 shadow-[0_0_30px_rgba(16,185,129,0.1)] relative">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-cyan-500"></div>
-        <Globe2 className="w-12 h-12 text-emerald-400 mx-auto mb-2 drop-shadow-[0_0_10px_rgba(52,211,153,0.3)]" />
+        
+        {/* --- LOGO DE LA RONDA --- */}
+        <img 
+          src={logo} 
+          alt="Logo La Ronda" 
+          className="w-24 h-24 object-contain mx-auto mb-2 drop-shadow-[0_0_15px_rgba(52,211,153,0.2)] hover:scale-105 transition-transform" 
+        />
+        
         <h1 className="text-2xl font-black text-center text-white mb-1">PRODE 2026</h1>
-        <p className="text-emerald-400/80 text-center text-xs font-medium mb-6">Comunidad Inframe15</p>
+        {/* Actualizamos el texto de la comunidad */}
+        <p className="text-emerald-400/80 text-center text-xs font-medium mb-6">Comunidad La Ronda</p>
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -59,7 +68,7 @@ export default function LoginScreen({ onAuthAction, isSaving }) {
             </div>
           )}
 
-          <button type="submit" disabled={isSaving} className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-black py-3 rounded-xl transition-all font-bold flex items-center justify-center gap-2 mt-2">
+          <button type="submit" disabled={isSaving} className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-black py-3 rounded-xl transition-all flex items-center justify-center gap-2 mt-2">
             {isSaving ? 'PROCESANDO...' : isRegistering ? 'REGISTRARME E INGRESAR' : 'ENTRAR A LA CANCHA'}
             {isRegistering ? <UserPlus className="w-4 h-4"/> : <LogIn className="w-4 h-4"/>}
           </button>

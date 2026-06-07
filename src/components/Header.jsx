@@ -1,7 +1,8 @@
 import React from 'react';
-import { Trophy, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../lib/firebase';
+import logo from '../assets/logo-rondero.webp'; 
 
 export default function Header({ userProfile }) {
   const handleLogout = async () => {
@@ -15,11 +16,15 @@ export default function Header({ userProfile }) {
   return (
     <header className="bg-slate-900 border-b border-emerald-500/20 sticky top-0 z-50 shadow-md">
       <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
-        {/* Branding */}
-        <div className="flex items-center gap-2">
-          <Trophy className="w-6 h-6 text-emerald-400" />
+        {/* Branding con logo más grande */}
+        <div className="flex items-center gap-3">
+          <img 
+            src={logo} 
+            alt="Logo La Ronda" 
+            className="w-12 h-12 object-contain" 
+          />
           <span className="font-black text-xl tracking-tight text-white">
-            PRODE <span className="text-emerald-400">IN15</span>
+            PRODE <span className="text-emerald-400">RONDERO</span>
           </span>
         </div>
 

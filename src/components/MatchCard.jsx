@@ -1,5 +1,6 @@
 import React from 'react';
 import { CheckCircle } from 'lucide-react';
+import ReactCountryFlag from 'react-country-flag'; 
 
 // Función para calcular los puntos que muestra la tarjeta finalizada
 const calculateMatchPoints = (predHome, predAway, realHome, realAway) => {
@@ -45,11 +46,30 @@ export default function MatchCard({ match, prediction, onPredictionChange, onSav
       </div>
       
       <div className="flex items-center justify-between mb-5">
+        {/* --- BANDERA LOCAL --- */}
         <div className="flex flex-col items-center w-[30%]">
-          <span className="text-5xl mb-2 drop-shadow-lg transition-transform hover:scale-110">{match.flagH || '🏁'}</span>
+          <div className="mb-3 transition-transform hover:scale-110 flex justify-center">
+            {match.flagH && match.flagH.length === 2 ? (
+              <ReactCountryFlag 
+                countryCode={match.flagH} 
+                svg 
+                style={{
+                  width: '3.5em', 
+                  height: '3.5em', 
+                  borderRadius: '50%', 
+                  objectFit: 'cover',
+                  boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.4)'
+                }} 
+                title={match.home} 
+              />
+            ) : (
+              <span className="text-5xl drop-shadow-lg">{match.flagH || '🏁'}</span>
+            )}
+          </div>
           <span className="font-bold text-sm text-center leading-tight text-white">{match.home}</span>
         </div>
         
+        {/* --- INPUTS DE SCORE --- */}
         <div className="flex items-center gap-2 w-[40%] justify-center">
           <input 
             type="number" min="0" max="15" disabled={isFinished}
@@ -66,8 +86,26 @@ export default function MatchCard({ match, prediction, onPredictionChange, onSav
           />
         </div>
         
+        {/* --- BANDERA VISITANTE --- */}
         <div className="flex flex-col items-center w-[30%]">
-          <span className="text-5xl mb-2 drop-shadow-lg transition-transform hover:scale-110">{match.flagA || '🏁'}</span>
+          <div className="mb-3 transition-transform hover:scale-110 flex justify-center">
+            {match.flagA && match.flagA.length === 2 ? (
+              <ReactCountryFlag 
+                countryCode={match.flagA} 
+                svg 
+                style={{
+                  width: '3.5em', 
+                  height: '3.5em', 
+                  borderRadius: '50%', 
+                  objectFit: 'cover',
+                  boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.4)'
+                }} 
+                title={match.away} 
+              />
+            ) : (
+              <span className="text-5xl drop-shadow-lg">{match.flagA || '🏁'}</span>
+            )}
+          </div>
           <span className="font-bold text-sm text-center leading-tight text-white">{match.away}</span>
         </div>
       </div>
@@ -76,7 +114,6 @@ export default function MatchCard({ match, prediction, onPredictionChange, onSav
         <button 
           onClick={() => onSavePrediction(match.id)}
           className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border ${
-            // Si ya hay valores, ponemos el botón verde (éxito), sino gris
             (myPred.homeScore !== undefined && myPred.awayScore !== undefined)
               ? "bg-emerald-600/20 text-emerald-400 border-emerald-500/50 hover:bg-emerald-600/30"
               : "bg-slate-950/50 text-slate-400 border-slate-700 hover:border-emerald-500/50 hover:text-emerald-400"
