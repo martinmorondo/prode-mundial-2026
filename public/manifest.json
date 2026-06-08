@@ -1,0 +1,20 @@
+{
+  "name": "Prode La Ronda 2026",
+  "short_name": "Prode 2026",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#10b981",
+  "icons": [
+    {
+      "src": "/logo-rondero.png", 
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo-rondero.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
