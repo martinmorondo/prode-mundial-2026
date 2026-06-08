@@ -1,8 +1,8 @@
-import React from 'react';
-import { CheckCircle } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { CheckCircle, ChevronUp, ChevronDown, Lock, Camera, AlertCircle } from 'lucide-react'; // <-- Agregamos AlertCircle
 import ReactCountryFlag from 'react-country-flag'; 
+import { toPng } from 'html-to-image'; 
 
-// Función para calcular los puntos que muestra la tarjeta finalizada
 const calculateMatchPoints = (predHome, predAway, realHome, realAway) => {
   if (predHome === undefined || predAway === undefined || realHome === undefined || realAway === undefined) return 0;
   if (predHome === '' || predAway === '' || realHome === '' || realAway === '') return 0;
@@ -20,48 +20,168 @@ export default function MatchCard({ match, prediction, onPredictionChange, onSav
   const isFinished = match.status === 'finished';
   const myPred = prediction || {};
   
-  // Lógica de estilos basados en la importancia del partido
+  const cardRef = useRef(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [showPopup, setShowPopup] = useState(false);
+  const [showErrorPopup, setShowErrorPopup] = useState(false); // <-- Nuevo estado para el error
+  const [isDirty, setIsDirty] = useState(false); 
+  
+  const now = new Date();
+  let isLockedByTime = false;
+
+  if (match.date && !match.date.toLowerCase().includes('definir')) {
+    try {
+      const [datePart, timePart] = match.date.split(' ');
+      if (datePart && timePart) {
+        const [d, m, y] = datePart.split('/');
+        const [h, min] = timePart.split(':');
+        const matchDate = new Date(y, m - 1, d, h, min);
+        const cutoffTime = new Date(matchDate.getTime() - (60 * 60 * 1000));
+        
+        if (now >= cutoffTime) {
+          isLockedByTime = true;
+        }
+      }
+    } catch (e) {
+      console.warn("No se pudo parsear la fecha para el bloqueo:", match.date);
+    }
+  }
+
+  const isLocked = isFinished || isLockedByTime;
+
   let cardStyle = "bg-slate-900 border-slate-700 hover:border-emerald-500/50";
   let titleStyle = "text-slate-500";
   
   if (isFinished) {
     cardStyle = "bg-slate-900/50 border-slate-800 opacity-75";
   } else if (match.group?.toUpperCase().includes('FINAL')) {
-    // Dorado para la final
     cardStyle = "bg-gradient-to-br from-slate-900 via-slate-900 to-amber-900/30 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)] hover:border-amber-400 scale-[1.02]";
     titleStyle = "text-amber-500 font-black tracking-widest";
   } else if (match.group?.toUpperCase().includes('SF') || match.group?.toUpperCase().includes('QF') || match.group?.toUpperCase().includes('R16')) {
-    // Morado para eliminación directa
     cardStyle = "bg-gradient-to-br from-slate-900 to-purple-900/20 border-purple-500/30 hover:border-purple-400";
     titleStyle = "text-purple-400 font-bold";
   }
+
+  const handleScoreChange = (type, val) => {
+    if (isLocked) return;
+    setIsDirty(true);
+    onPredictionChange(match.id, type, val);
+  };
+
+  const changeByButton = (type, increment) => {
+    if (isLocked) return;
+    setIsDirty(true);
+    let val = parseInt(myPred[type], 10);
+    if (isNaN(val)) val = 0;
+    let newVal = val + increment;
+    if (newVal < 0) newVal = 0;
+    if (newVal > 15) newVal = 15; 
+    onPredictionChange(match.id, type, newVal.toString());
+  };
+
+  // Movimos la verificación hacia arriba para usarla dentro de handleSave
+  const hasValues = myPred.homeScore !== undefined && myPred.homeScore !== '' && myPred.awayScore !== undefined && myPred.awayScore !== '';
+
+  const handleSave = () => {
+    if (isLocked) return;
+
+    // --- NUEVA VALIDACIÓN ---
+    if (!hasValues) {
+      setShowErrorPopup(true);
+      setTimeout(() => setShowErrorPopup(false), 2000); // Se oculta a los 2 segundos
+      return; // Frenamos la ejecución para que no guarde en la BD
+    }
+
+    setIsDirty(false); 
+    onSavePrediction(match.id);
+    
+    setShowPopup(true);
+    setTimeout(() => setShowPopup(false), 1500);
+  };
+
+  const handleShare = async () => {
+    if (cardRef.current === null) return;
+    setIsCapturing(true); 
+    
+    setTimeout(async () => {
+      try {
+        const dataUrl = await toPng(cardRef.current, { 
+          cacheBust: true,
+          backgroundColor: '#0f172a',
+          pixelRatio: 2,
+          style: { margin: '0' }
+        });
+        const link = document.createElement('a');
+        link.download = `Prode-${match.home}-vs-${match.away}.png`;
+        link.href = dataUrl;
+        link.click();
+      } catch (err) {
+        console.error('Error al generar la imagen', err);
+      } finally {
+        setIsCapturing(false); 
+      }
+    }, 150);
+  };
+
+  let btnText = "Confirmar Pronóstico";
+  let btnStyle = "bg-slate-950/50 text-slate-400 border-slate-700 hover:border-emerald-500/50 hover:text-emerald-400";
+
+  if (hasValues) {
+    if (isDirty) {
+      btnText = "Actualizar Pronóstico 🔄";
+      btnStyle = "bg-blue-600/20 text-blue-400 border-blue-500/50 hover:bg-blue-600/30"; 
+    } else {
+      btnText = "Pronóstico Guardado ✅";
+      btnStyle = "bg-emerald-600/20 text-emerald-400 border-emerald-500/50 hover:bg-emerald-600/30"; 
+    }
+  }
   
   return (
-    <div className={`p-5 rounded-2xl border relative overflow-hidden transition-all duration-300 ${cardStyle}`}>
-      {isFinished && (
-        <div className="absolute top-0 right-0 bg-slate-800 text-slate-400 text-[10px] font-bold px-3 py-1 rounded-bl-lg">FINALIZADO</div>
+    <div ref={cardRef} className={`p-5 rounded-2xl border relative overflow-hidden transition-all duration-300 ${cardStyle}`}>
+      
+      {/* POP-UP DE ÉXITO */}
+      {showPopup && !isCapturing && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-emerald-500 text-slate-950 px-5 py-3 rounded-2xl font-black flex items-center gap-2 shadow-[0_0_30px_rgba(16,185,129,0.4)] animate-in zoom-in-50 duration-300">
+            <CheckCircle className="w-6 h-6" />
+            ¡GUARDADO!
+          </div>
+        </div>
       )}
+
+      {/* NUEVO POP-UP DE ERROR */}
+      {showErrorPopup && !isCapturing && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-red-500 text-white px-5 py-3 rounded-2xl font-black flex items-center gap-2 shadow-[0_0_30px_rgba(239,68,68,0.4)] animate-in zoom-in-50 duration-300">
+            <AlertCircle className="w-6 h-6" />
+            ¡INGRESA UN RESULTADO!
+          </div>
+        </div>
+      )}
+
+      {isCapturing && (
+        <div className="w-full flex justify-center mb-3">
+          <div className="bg-emerald-950/60 border border-emerald-900/50 px-4 py-1 rounded-full text-[10px] font-black text-emerald-500 tracking-widest uppercase shadow-lg">
+            PRODE LA RONDA 2026
+          </div>
+        </div>
+      )}
+
+      {isFinished ? (
+        <div className="absolute top-0 right-0 bg-slate-800 text-slate-400 text-[10px] font-bold px-3 py-1 rounded-bl-lg z-10">FINALIZADO</div>
+      ) : isLockedByTime ? (
+        <div className="absolute top-0 right-0 bg-red-900/80 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg z-10 shadow-lg">CERRADO</div>
+      ) : null}
+      
       <div className={`text-xs mb-4 text-center uppercase ${titleStyle}`}>
         {match.group} • {match.date || 'Fecha por definir'}
       </div>
       
       <div className="flex items-center justify-between mb-5">
-        {/* --- BANDERA LOCAL --- */}
         <div className="flex flex-col items-center w-[30%]">
           <div className="mb-3 transition-transform hover:scale-110 flex justify-center">
             {match.flagH && match.flagH.length === 2 ? (
-              <ReactCountryFlag 
-                countryCode={match.flagH} 
-                svg 
-                style={{
-                  width: '3.5em', 
-                  height: '3.5em', 
-                  borderRadius: '50%', 
-                  objectFit: 'cover',
-                  boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.4)'
-                }} 
-                title={match.home} 
-              />
+              <ReactCountryFlag countryCode={match.flagH} svg style={{ width: '3.5em', height: '3.5em', borderRadius: '50%', objectFit: 'cover', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.4)' }} title={match.home} />
             ) : (
               <span className="text-5xl drop-shadow-lg">{match.flagH || '🏁'}</span>
             )}
@@ -69,39 +189,66 @@ export default function MatchCard({ match, prediction, onPredictionChange, onSav
           <span className="font-bold text-sm text-center leading-tight text-white">{match.home}</span>
         </div>
         
-        {/* --- INPUTS DE SCORE --- */}
         <div className="flex items-center gap-2 w-[40%] justify-center">
-          <input 
-            type="number" min="0" max="15" disabled={isFinished}
-            value={myPred.homeScore !== undefined ? myPred.homeScore : ''}
-            onChange={(e) => onPredictionChange(match.id, 'homeScore', e.target.value)}
-            className="w-12 h-14 bg-slate-950/80 border border-slate-600 rounded-xl text-center text-2xl font-black text-white focus:border-emerald-500 outline-none disabled:opacity-50 transition-colors shadow-inner"
-          />
+          <div className={`flex items-center bg-slate-950/80 border ${isLocked ? 'border-red-900/50' : 'border-slate-600 focus-within:border-emerald-500'} rounded-xl overflow-hidden transition-colors shadow-inner`}>
+            {isCapturing ? (
+              <div className="w-10 h-14 flex items-center justify-center text-2xl font-black text-white bg-transparent">
+                {myPred.homeScore}
+              </div>
+            ) : (
+              <input 
+                type="number" min="0" max="15" disabled={isLocked}
+                value={myPred.homeScore !== undefined ? myPred.homeScore : ''}
+                onChange={(e) => handleScoreChange('homeScore', e.target.value)}
+                className={`w-10 h-14 bg-transparent text-center text-2xl font-black text-white outline-none appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isLocked ? 'opacity-50 text-slate-500' : ''}`}
+              />
+            )}
+            
+            {!isLocked && !isCapturing && (
+              <div className="flex flex-col border-l border-slate-700/50 h-full">
+                <button onClick={() => changeByButton('homeScore', 1)} className="flex-1 px-1.5 hover:bg-slate-800 text-slate-400 hover:text-emerald-400 transition-colors border-b border-slate-700/50 flex items-center justify-center">
+                  <ChevronUp className="w-4 h-4" strokeWidth={3} />
+                </button>
+                <button onClick={() => changeByButton('homeScore', -1)} className="flex-1 px-1.5 hover:bg-slate-800 text-slate-400 hover:text-emerald-400 transition-colors flex items-center justify-center">
+                  <ChevronDown className="w-4 h-4" strokeWidth={3} />
+                </button>
+              </div>
+            )}
+          </div>
+
           <span className="text-slate-500 font-bold">-</span>
-          <input 
-            type="number" min="0" max="15" disabled={isFinished}
-            value={myPred.awayScore !== undefined ? myPred.awayScore : ''}
-            onChange={(e) => onPredictionChange(match.id, 'awayScore', e.target.value)}
-            className="w-12 h-14 bg-slate-950/80 border border-slate-600 rounded-xl text-center text-2xl font-black text-white focus:border-emerald-500 outline-none disabled:opacity-50 transition-colors shadow-inner"
-          />
+          
+          <div className={`flex items-center bg-slate-950/80 border ${isLocked ? 'border-red-900/50' : 'border-slate-600 focus-within:border-emerald-500'} rounded-xl overflow-hidden transition-colors shadow-inner`}>
+            {isCapturing ? (
+              <div className="w-10 h-14 flex items-center justify-center text-2xl font-black text-white bg-transparent">
+                {myPred.awayScore}
+              </div>
+            ) : (
+              <input 
+                type="number" min="0" max="15" disabled={isLocked}
+                value={myPred.awayScore !== undefined ? myPred.awayScore : ''}
+                onChange={(e) => handleScoreChange('awayScore', e.target.value)}
+                className={`w-10 h-14 bg-transparent text-center text-2xl font-black text-white outline-none appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isLocked ? 'opacity-50 text-slate-500' : ''}`}
+              />
+            )}
+
+            {!isLocked && !isCapturing && (
+              <div className="flex flex-col border-l border-slate-700/50 h-full">
+                <button onClick={() => changeByButton('awayScore', 1)} className="flex-1 px-1.5 hover:bg-slate-800 text-slate-400 hover:text-emerald-400 transition-colors border-b border-slate-700/50 flex items-center justify-center">
+                  <ChevronUp className="w-4 h-4" strokeWidth={3} />
+                </button>
+                <button onClick={() => changeByButton('awayScore', -1)} className="flex-1 px-1.5 hover:bg-slate-800 text-slate-400 hover:text-emerald-400 transition-colors flex items-center justify-center">
+                  <ChevronDown className="w-4 h-4" strokeWidth={3} />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         
-        {/* --- BANDERA VISITANTE --- */}
         <div className="flex flex-col items-center w-[30%]">
           <div className="mb-3 transition-transform hover:scale-110 flex justify-center">
             {match.flagA && match.flagA.length === 2 ? (
-              <ReactCountryFlag 
-                countryCode={match.flagA} 
-                svg 
-                style={{
-                  width: '3.5em', 
-                  height: '3.5em', 
-                  borderRadius: '50%', 
-                  objectFit: 'cover',
-                  boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.4)'
-                }} 
-                title={match.away} 
-              />
+              <ReactCountryFlag countryCode={match.flagA} svg style={{ width: '3.5em', height: '3.5em', borderRadius: '50%', objectFit: 'cover', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.4)' }} title={match.away} />
             ) : (
               <span className="text-5xl drop-shadow-lg">{match.flagA || '🏁'}</span>
             )}
@@ -110,22 +257,11 @@ export default function MatchCard({ match, prediction, onPredictionChange, onSav
         </div>
       </div>
       
-      {!isFinished ? (
-        <button 
-          onClick={() => onSavePrediction(match.id)}
-          className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border ${
-            (myPred.homeScore !== undefined && myPred.awayScore !== undefined)
-              ? "bg-emerald-600/20 text-emerald-400 border-emerald-500/50 hover:bg-emerald-600/30"
-              : "bg-slate-950/50 text-slate-400 border-slate-700 hover:border-emerald-500/50 hover:text-emerald-400"
-          }`}
-        >
-          <CheckCircle className="w-5 h-5" /> 
-          { (myPred.homeScore !== undefined && myPred.awayScore !== undefined) 
-            ? "Pronóstico Guardado ✅" 
-            : "Confirmar Pronóstico" 
-          }
+      {!isLocked && !isCapturing ? (
+        <button onClick={handleSave} className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border ${btnStyle}`}>
+          {btnText.includes('✅') && <CheckCircle className="w-5 h-5" />} {btnText}
         </button>
-      ) : (
+      ) : isFinished && !isCapturing ? (
         <div className="mt-2 pt-3 border-t border-slate-800/50 text-center bg-slate-950/30 rounded-xl pb-2">
           <div className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Resultado Real</div>
           <div className="font-black text-2xl text-white tracking-wider">{match.realHomeScore} - {match.realAwayScore}</div>
@@ -138,9 +274,31 @@ export default function MatchCard({ match, prediction, onPredictionChange, onSav
             </div>
           )}
         </div>
+      ) : isLockedByTime && !isCapturing ? (
+        <div className="mt-2 pt-3 border-t border-slate-800/50 text-center bg-red-950/20 rounded-xl pb-2 border border-red-900/30">
+          <div className="text-red-400 font-bold flex items-center justify-center gap-2 py-2">
+             <Lock className="w-4 h-4" /> El tiempo para pronosticar ha finalizado
+          </div>
+        </div>
+      ) : isCapturing ? (
+          <div className="mt-4 pt-3 border-t border-emerald-900/50 text-center bg-emerald-950/20 rounded-xl pb-3 border">
+              <div className="text-[10px] text-emerald-500 uppercase tracking-widest mb-1 font-bold">Mi Pronóstico Guardado</div>
+          </div>
+      ) : null}
+      
+      {!isCapturing && hasValues && !isDirty && (
+        <div className="mt-3 flex justify-center">
+          <button 
+            onClick={handleShare} 
+            className="text-xs font-bold text-slate-400 hover:text-emerald-400 flex items-center gap-1.5 transition-colors bg-slate-950/50 px-4 py-2 rounded-xl border border-slate-800 hover:border-emerald-500/50"
+            title="Descargar imagen"
+          >
+            <Camera size={14} /> Compartir Resultado
+          </button>
+        </div>
       )}
-      {/* --- TERMÓMETRO DE LA COMUNIDAD --- */}
-      {stats && stats.total > 0 && (
+
+      {stats && stats.total > 0 && !isCapturing && (
         <div className="mt-4 pt-4 border-t border-slate-800/50">
           <div className="flex justify-between items-end mb-2">
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
@@ -152,8 +310,6 @@ export default function MatchCard({ match, prediction, onPredictionChange, onSav
               <span className="text-blue-400">{stats.away}% V</span>
             </div>
           </div>
-          
-          {/* Barra de progreso dividida en 3 colores */}
           <div className="flex h-1.5 w-full rounded-full overflow-hidden bg-slate-800">
             <div style={{ width: `${stats.home}%` }} className="bg-emerald-500 transition-all duration-1000"></div>
             <div style={{ width: `${stats.draw}%` }} className="bg-slate-500 transition-all duration-1000"></div>
