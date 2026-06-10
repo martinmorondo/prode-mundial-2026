@@ -15,7 +15,7 @@ export function useAuth() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser); // Asegúrate de actualizar el estado del usuario
+      setUser(currentUser);
       
       if (currentUser) {
         try {

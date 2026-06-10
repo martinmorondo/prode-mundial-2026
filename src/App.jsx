@@ -67,6 +67,7 @@ export default function ProdeLaRondaApp() {
           uid: credential.user.uid, 
           name: authData.name, 
           avatar: authData.avatar, 
+          role: 'user', 
           createdAt: new Date().toISOString() 
         };
         await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', credential.user.uid), userData);
@@ -90,6 +91,7 @@ export default function ProdeLaRondaApp() {
     });
   };
 
+  // --- LÓGICA DE GUARDADO CORREGIDA ---
   const savePrediction = async (matchId) => {
     const match = matches.find(m => m.id === matchId);
     if (!match) return;
@@ -99,28 +101,18 @@ export default function ProdeLaRondaApp() {
       return;
     }
 
-    if (match.date && !match.date.toLowerCase().includes('definir')) {
-      try {
-        const [datePart, timePart] = match.date.split(' ');
-        if (datePart && timePart) {
-          const [d, m, y] = datePart.split('/');
-          const [h, min] = timePart.split(':');
-          
-          const matchDate = new Date(Date.UTC(y, m - 1, d, h, min));
-          const cutoffTime = new Date(matchDate.getTime() - (60 * 60 * 1000));
-          
-          if (new Date() >= cutoffTime) {
-            alert("¡El tiempo para pronosticar este partido ha finalizado!");
-            return;
-          }
-        }
-      } catch (e) {
-        console.warn("Error en validación de tiempo:", e);
+    // Validación de tiempo moderna usando el objeto Date nativo
+    if (match.date && match.date instanceof Date && !isNaN(match.date.getTime())) {
+      const cutoffTime = new Date(match.date.getTime() - (60 * 60 * 1000));
+      if (new Date() >= cutoffTime) {
+        alert("¡El tiempo para pronosticar este partido ha finalizado!");
+        return;
       }
     }
 
     const pred = myPredictions[matchId];
     if (!pred || pred.homeScore === '' || pred.awayScore === '') return;
+    
     try {
       const predId = `${user.uid}_${matchId}`;
       const payload = {
@@ -133,33 +125,25 @@ export default function ProdeLaRondaApp() {
       };
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'predictions', predId), payload);
     } catch (e) {
-      console.error("Error", e);
+      console.error("Error guardando predicción:", e);
+      alert("Hubo un error al guardar. Verifica tu conexión.");
     }
   };
 
   if (loadingAuth) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center relative overflow-hidden">
-        {/* Fondo con brillo sutil */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-emerald-900/20 via-slate-950 to-slate-950"></div>
-        
         <div className="relative z-10 flex flex-col items-center">
-          {/* Contenedor del Logo con anillos animados */}
           <div className="relative flex items-center justify-center w-28 h-28 mb-6">
-            {/* Anillo exterior rápido */}
             <div className="absolute inset-0 border-t-2 border-r-2 border-emerald-500 rounded-full animate-spin"></div>
-            {/* Anillo interior lento y en reversa */}
             <div className="absolute inset-2 border-b-2 border-l-2 border-emerald-400/30 rounded-full animate-[spin_3s_linear_reverse]"></div>
-            
-            {/* TU LOGO */}
             <img 
               src="/logo-rondero.png" 
               alt="La Ronda" 
               className="w-16 h-16 object-contain animate-pulse drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" 
             />
           </div>
-
-          {/* Texto estilizado */}
           <h2 className="text-emerald-400 font-black tracking-widest uppercase text-sm animate-pulse">
             Comprobando sesión...
           </h2>
@@ -175,25 +159,17 @@ export default function ProdeLaRondaApp() {
   if (loadingDb || !userProfile) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center relative overflow-hidden">
-        {/* Fondo con brillo sutil */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-emerald-900/20 via-slate-950 to-slate-950"></div>
-        
         <div className="relative z-10 flex flex-col items-center">
-          {/* Contenedor del Logo con anillos animados */}
           <div className="relative flex items-center justify-center w-28 h-28 mb-6">
-            {/* Anillo exterior rápido */}
             <div className="absolute inset-0 border-t-2 border-r-2 border-emerald-500 rounded-full animate-spin"></div>
-            {/* Anillo interior lento y en reversa */}
             <div className="absolute inset-2 border-b-2 border-l-2 border-emerald-400/30 rounded-full animate-[spin_3s_linear_reverse]"></div>
-            
             <img 
               src="/logo-rondero.png" 
               alt="La Ronda" 
               className="w-16 h-16 object-contain animate-pulse drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" 
             />
           </div>
-
-          {/* Texto estilizado */}
           <h2 className="text-emerald-400 font-black tracking-widest uppercase text-sm animate-pulse">
             Cargando fixture de La Ronda...
           </h2>
@@ -202,9 +178,9 @@ export default function ProdeLaRondaApp() {
     );
   }
 
-  // Extraemos la información del ranking para el usuario actual
   const currentUserRanking = ranking.find(r => r.uid === user.uid);
   const currentUserPosition = ranking.findIndex(r => r.uid === user.uid) + 1;
+  const isAdmin = userProfile?.role === 'admin';
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans pb-20 selection:bg-emerald-500/30 relative overflow-x-hidden">
@@ -212,7 +188,6 @@ export default function ProdeLaRondaApp() {
       <main className="max-w-4xl mx-auto p-4 mt-4 relative">
         <Navigation activeTab={activeTab} setActiveTab={setActiveTab} user={user} />
         
-        {/* NUEVA PESTAÑA DE PERFIL */}
         {activeTab === 'perfil' && (
           <ProfileTab 
             userProfile={userProfile} 
@@ -234,11 +209,11 @@ export default function ProdeLaRondaApp() {
           <CandidatesTab myBonusPred={myBonusPred} saveBonusPrediction={saveBonusPrediction} />
         )}
         
-        {activeTab === 'admin' && user.uid === 'fOz55g8nrCYI8onReC60p8SMX1S2' && (
+        {activeTab === 'admin' && isAdmin && (
           <AdminTab matches={matches} />
         )}
         
-        {activeTab === 'admin' && user.uid !== 'fOz55g8nrCYI8onReC60p8SMX1S2' && (
+        {activeTab === 'admin' && !isAdmin && (
           <div className="text-center p-10 text-slate-500">
             🚫 Acceso denegado. Solo para administradores.
           </div>

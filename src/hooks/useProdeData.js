@@ -2,37 +2,76 @@ import { useState, useEffect, useMemo } from 'react';
 import { onSnapshot, setDoc, doc } from 'firebase/firestore';
 import { db, getPublicCollection } from '../lib/firebase';
 
-// Helper de cálculo de puntos
+// ==========================================
+// CONSTANTES Y UTILIDADES PURAS
+// ==========================================
+const BONUS_POINTS = { CHAMPION: 10, SCORER: 5, PLAYER: 5 };
+
 const calculateMatchPoints = (predHome, predAway, realHome, realAway) => {
-  if (predHome === undefined || predAway === undefined || realHome === undefined || realAway === undefined) return 0;
-  if (predHome === '' || predAway === '' || realHome === '' || realAway === '') return 0;
+  if ([predHome, predAway, realHome, realAway].some(val => val === undefined || val === '')) return 0;
 
   const ph = parseInt(predHome, 10), pa = parseInt(predAway, 10);
   const rh = parseInt(realHome, 10), ra = parseInt(realAway, 10);
   if (isNaN(ph) || isNaN(pa) || isNaN(rh) || isNaN(ra)) return 0;
+  
   if (ph === rh && pa === ra) return 3; 
   
   const predTrend = (ph - pa) > 0 ? 'home' : (ph - pa) < 0 ? 'away' : 'draw';
   const realTrend = (rh - ra) > 0 ? 'home' : (rh - ra) < 0 ? 'away' : 'draw';
+  
   if (predTrend === realTrend) return 1; 
   return 0; 
 };
 
-// Helper para parsear la fecha y ordenar los partidos cronológicamente
-const parseDateForSort = (dStr) => {
-  if (!dStr || dStr.includes('definir')) return 0;
-  try {
-    const [datePart, timePart] = dStr.split(' ');
-    const [d, m, y] = datePart.split('/');
-    const [h, min] = timePart.split(':');
-    return new Date(y, m - 1, d, h, min).getTime();
-  } catch (e) {
-    return 0;
-  }
+const getCommunityTrend = (stats) => {
+  if (!stats) return null;
+  if (stats.home > stats.away && stats.home > stats.draw) return 'home';
+  if (stats.away > stats.home && stats.away > stats.draw) return 'away';
+  if (stats.draw > stats.home && stats.draw > stats.away) return 'draw';
+  return null;
 };
 
-const BONUS_POINTS = { CHAMPION: 10, SCORER: 5, PLAYER: 5 };
+const parseMatchDate = (dStr) => {
+  if (!dStr) return null;
+  if (typeof dStr === 'string' && dStr.toLowerCase().includes('definir')) return null;
+  if (dStr.toDate) return dStr.toDate(); 
 
+  try {
+    if (typeof dStr === 'number') {
+      return new Date(dStr < 10000000000 ? dStr * 1000 : dStr);
+    }
+    if (typeof dStr === 'string') {
+      let cleanStr = dStr.trim();
+      if (/^\d+$/.test(cleanStr)) {
+        const num = parseInt(cleanStr, 10);
+        return new Date(num < 10000000000 ? num * 1000 : num);
+      }
+      const isoDate = new Date(cleanStr);
+      if (!isNaN(isoDate)) return isoDate;
+
+      // Fallback manual 
+      if (cleanStr.includes(' ')) {
+        const [datePart, timePart] = cleanStr.split(' ');
+        const parts = datePart.split(/[-/]/);
+        if (parts.length >= 3) {
+          let [y, m, d] = parts[0].length === 4 ? parts : [parts[2], parts[1], parts[0]];
+          if (parseInt(m, 10) > 12) [d, m] = [m, d]; // Ajuste defensivo (US format)
+          const fallbackDate = new Date(`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}T${timePart}Z`);
+          if (!isNaN(fallbackDate)) return fallbackDate;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Error silencioso parseando fecha:", dStr);
+  }
+  return null;
+};
+
+const parseDateForSort = (d) => (d && d instanceof Date && !isNaN(d)) ? d.getTime() : 0;
+
+// ==========================================
+// CUSTOM HOOK
+// ==========================================
 export function useProdeData(user) {
   const [usersDb, setUsersDb] = useState({});
   const [matches, setMatches] = useState([]);
@@ -43,19 +82,51 @@ export function useProdeData(user) {
   const [tournamentResults, setTournamentResults] = useState({}); 
   const [loadingDb, setLoadingDb] = useState(true);
 
+  // Suscripciones a Firestore
   useEffect(() => {
     if (!user) return;
-    const unsubUsers = onSnapshot(getPublicCollection('users'), (snap) => {
+    
+    const unsubUsers = onSnapshot(getPublicCollection('users'), snap => {
       const uDict = {};
       snap.forEach(d => uDict[d.id] = d.data());
       setUsersDb(uDict);
     });
+    
     const unsubMatches = onSnapshot(getPublicCollection('matches'), (snap) => {
-      const m = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      m.sort((a, b) => (a.order || 0) - (b.order || 0));
+      const m = snap.docs.map(d => {
+        const data = d.data();
+        return { 
+          id: d.id, 
+          ...data,
+          date: parseMatchDate(data.date),
+          rawDate: data.date 
+        };
+      });
+
+      // --- ORDENAMIENTO SEMÁNTICO DE GRUPOS ---
+      const orderMap = {
+        "GRUPO A": 1, "GRUPO B": 2, "GRUPO C": 3, "GRUPO D": 4,
+        "GRUPO E": 5, "GRUPO F": 6, "GRUPO G": 7, "GRUPO H": 8,
+        "16AVOS DE FINAL": 9, "OCTAVOS DE FINAL": 10, "CUARTOS DE FINAL": 11,
+        "SEMIFINAL": 12, "TERCER PUESTO": 13, "FINAL": 14
+      };
+
+      m.sort((a, b) => {
+        const orderA = orderMap[a.group] || 99;
+        const orderB = orderMap[b.group] || 99;
+        
+        // Si tienen el mismo grupo, ordenamos por fecha
+        if (orderA === orderB) {
+          return parseDateForSort(a.date) - parseDateForSort(b.date);
+        }
+        // Si son grupos distintos, usamos el orden lógico
+        return orderA - orderB;
+      });
+
       setMatches(m);
     });
-    const unsubPreds = onSnapshot(getPublicCollection('predictions'), (snap) => {
+
+    const unsubPreds = onSnapshot(getPublicCollection('predictions'), snap => {
       const p = [];
       const myP = {};
       snap.forEach(d => {
@@ -66,7 +137,8 @@ export function useProdeData(user) {
       setAllPredictions(p);
       setMyPredictions(myP);
     });
-    const unsubBonus = onSnapshot(getPublicCollection('bonus_predictions'), (snap) => {
+    
+    const unsubBonus = onSnapshot(getPublicCollection('bonus_predictions'), snap => {
       const b = {};
       snap.forEach(d => {
         const data = d.data();
@@ -76,74 +148,62 @@ export function useProdeData(user) {
       setAllBonusPreds(b);
       setLoadingDb(false);
     });
-    const unsubResults = onSnapshot(doc(getPublicCollection('settings'), 'bonus_results'), (docSnap) => {
+    
+    const unsubResults = onSnapshot(doc(getPublicCollection('settings'), 'bonus_results'), docSnap => {
       if (docSnap.exists()) setTournamentResults(docSnap.data());
     });
+    
     return () => { unsubUsers(); unsubMatches(); unsubPreds(); unsubBonus(); unsubResults(); };
   }, [user]);
 
-  // 1. CALCULAMOS PRIMERO EL TERMÓMETRO (Para saber la opinión de la mayoría)
+  // Cálculos memorizados
   const matchStats = useMemo(() => {
     const stats = {};
-    allPredictions.forEach(pred => {
-      if (!stats[pred.matchId]) {
-        stats[pred.matchId] = { home: 0, draw: 0, away: 0, total: 0 };
-      }
-      const home = parseInt(pred.homeScore, 10);
-      const away = parseInt(pred.awayScore, 10);
+    allPredictions.forEach(({ matchId, homeScore, awayScore }) => {
+      if (!stats[matchId]) stats[matchId] = { home: 0, draw: 0, away: 0, total: 0 };
+      
+      const home = parseInt(homeScore, 10);
+      const away = parseInt(awayScore, 10);
+      
       if (!isNaN(home) && !isNaN(away)) {
         const diff = home - away;
-        if (diff > 0) stats[pred.matchId].home += 1;
-        else if (diff < 0) stats[pred.matchId].away += 1;
-        else stats[pred.matchId].draw += 1;
-        stats[pred.matchId].total += 1;
+        if (diff > 0) stats[matchId].home += 1;
+        else if (diff < 0) stats[matchId].away += 1;
+        else stats[matchId].draw += 1;
+        stats[matchId].total += 1;
       }
     });
 
-    const statsWithPercentages = {};
-    Object.keys(stats).forEach(matchId => {
-      const s = stats[matchId];
+    const percentages = {};
+    for (const [matchId, s] of Object.entries(stats)) {
       if (s.total > 0) {
-        statsWithPercentages[matchId] = {
+        percentages[matchId] = {
           home: Math.round((s.home / s.total) * 100),
           draw: Math.round((s.draw / s.total) * 100),
           away: Math.round((s.away / s.total) * 100),
           total: s.total
         };
       }
-    });
-    return statsWithPercentages;
+    }
+    return percentages;
   }, [allPredictions]);
 
-  // 2. LUEGO CALCULAMOS EL RANKING Y LAS MEDALLAS
   const ranking = useMemo(() => {
     if (!matches.length || !Object.keys(usersDb).length) return [];
     
-    // Inicializamos a los usuarios con los nuevos contadores
     const scores = Object.keys(usersDb).reduce((acc, uid) => {
       acc[uid] = { ...usersDb[uid], points: 0, exact: 0, trends: 0, bonusPoints: 0, currentStreak: 0, giantKiller: 0 };
       return acc;
     }, {});
 
     const finishedMatches = matches.filter(m => m.status === 'finished');
-    
-    // Función para saber qué votó la mayoría en un partido
-    const getCommunityTrend = (stats) => {
-      if (!stats) return null;
-      if (stats.home > stats.away && stats.home > stats.draw) return 'home';
-      if (stats.away > stats.home && stats.away > stats.draw) return 'away';
-      if (stats.draw > stats.home && stats.draw > stats.away) return 'draw';
-      return null;
-    };
-
-    // Estructuramos las predicciones por usuario para facilitar la búsqueda
     const predsByUser = {};
+    
     allPredictions.forEach(p => {
       if (!predsByUser[p.userId]) predsByUser[p.userId] = {};
       predsByUser[p.userId][p.matchId] = p;
     });
 
-    // A. Sumar puntos generales y buscar Batacazos
     allPredictions.forEach(pred => {
       const match = finishedMatches.find(m => m.id === pred.matchId);
       if (!match || !scores[pred.userId]) return;
@@ -155,56 +215,42 @@ export function useProdeData(user) {
       if (basePts === 3) scores[pred.userId].exact += 1;
       if (basePts === 1) scores[pred.userId].trends += 1;
 
-      // LÓGICA CAZAGIGANTES: Si acertó, pero la comunidad votó distinto
+      // Cálculo de Rompe-Prodes (Giant Killer)
       if (basePts > 0) {
-         const mStats = matchStats[match.id];
-         const communityTrend = getCommunityTrend(mStats);
+         const communityTrend = getCommunityTrend(matchStats[match.id]);
          const realTrend = (match.realHomeScore - match.realAwayScore) > 0 ? 'home' : (match.realHomeScore - match.realAwayScore) < 0 ? 'away' : 'draw';
-         
-         // Si la comunidad erró la tendencia, y el usuario la pegó
-         if (communityTrend && communityTrend !== realTrend) {
-            scores[pred.userId].giantKiller += 1;
-         }
+         if (communityTrend && communityTrend !== realTrend) scores[pred.userId].giantKiller += 1;
       }
     });
 
-    // B. Calcular la Racha Activa (Cronológica)
-    // Ordenamos los partidos terminados del más reciente al más antiguo
+    // Cálculo de Rachas (Streak)
     const sortedFinished = [...finishedMatches].sort((a, b) => parseDateForSort(b.date) - parseDateForSort(a.date));
-
     Object.keys(scores).forEach(uid => {
       let streak = 0;
       for (const match of sortedFinished) {
         const pred = predsByUser[uid]?.[match.id];
-        let pts = 0;
-        if (pred) {
-          pts = calculateMatchPoints(pred.homeScore, pred.awayScore, match.realHomeScore, match.realAwayScore);
-        }
-        
-        if (pts > 0) {
-          streak++;
-        } else {
-          // Apenas encuentra un partido sin acertar, se corta la racha actual
-          break; 
-        }
+        const pts = pred ? calculateMatchPoints(pred.homeScore, pred.awayScore, match.realHomeScore, match.realAwayScore) : 0;
+        if (pts > 0) streak++; else break; 
       }
       scores[uid].currentStreak = streak;
     });
 
-    // C. Sumar puntos de Candidatos
-    if (tournamentResults.realChampion || tournamentResults.realTopScorer || tournamentResults.realBestPlayer) {
-      Object.keys(allBonusPreds).forEach(uid => {
+    // Suma de Puntos Bonus
+    const { realChampion, realTopScorer, realBestPlayer } = tournamentResults;
+    if (realChampion || realTopScorer || realBestPlayer) {
+      Object.entries(allBonusPreds).forEach(([uid, userBonus]) => {
         if (!scores[uid]) return;
-        const userBonus = allBonusPreds[uid];
+        
         const checkBonus = (userVal, realVal, points) => {
           if (userVal && realVal && userVal.trim().toLowerCase() === realVal.trim().toLowerCase()) {
             scores[uid].points += points;
             scores[uid].bonusPoints += points;
           }
         };
-        checkBonus(userBonus.champion, tournamentResults.realChampion, BONUS_POINTS.CHAMPION);
-        checkBonus(userBonus.topScorer, tournamentResults.realTopScorer, BONUS_POINTS.SCORER);
-        checkBonus(userBonus.bestPlayer, tournamentResults.realBestPlayer, BONUS_POINTS.PLAYER);
+        
+        checkBonus(userBonus.champion, realChampion, BONUS_POINTS.CHAMPION);
+        checkBonus(userBonus.topScorer, realTopScorer, BONUS_POINTS.SCORER);
+        checkBonus(userBonus.bestPlayer, realBestPlayer, BONUS_POINTS.PLAYER);
       });
     }
 
@@ -212,12 +258,15 @@ export function useProdeData(user) {
   }, [matches, allPredictions, usersDb, allBonusPreds, tournamentResults, matchStats]);
 
   const saveBonusPrediction = async (champion, topScorer, bestPlayer) => {
-    if (!user) return;
+    if (!user) return false;
     try {
       const docRef = doc(getPublicCollection('bonus_predictions'), user.uid);
       await setDoc(docRef, { userId: user.uid, champion, topScorer, bestPlayer, updatedAt: new Date().toISOString() }, { merge: true });
       return true;
-    } catch (error) { return false; }
+    } catch (error) { 
+      console.error("Error guardando bonus", error);
+      return false; 
+    }
   };
 
   return { matches, myPredictions, setMyPredictions, ranking, matchStats, loadingDb, myBonusPred, saveBonusPrediction };
