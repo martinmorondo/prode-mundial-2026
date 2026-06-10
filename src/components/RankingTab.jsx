@@ -1,6 +1,5 @@
 import React from 'react';
-import { Trophy } from 'lucide-react';
-import { Medal } from 'lucide-react';
+import { Trophy, Medal, Flame, Shield } from 'lucide-react';
 
 export default function RankingTab({ ranking, currentUserUid }) { 
   return (
@@ -27,10 +26,38 @@ export default function RankingTab({ ranking, currentUserUid }) {
                   {idx < 3 ? <Medal className="w-6 h-6 text-yellow-400 mx-auto" /> : <span className="text-slate-500 font-bold">{idx + 1}</span>}
                 </td>
                 <td className="p-4">
-                  <div className="font-bold text-white flex items-center gap-3">
+                  <div className="font-bold text-white flex items-center flex-wrap gap-2">
                     <span className="text-2xl drop-shadow-md">{r.avatar || '👤'}</span>
-                    <span className="text-lg">{r.name}</span>
-                    {r.uid === currentUserUid && <span className="text-[10px] bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full font-black uppercase">Tú</span>}
+                    <span className="text-lg truncate max-w-[120px] sm:max-w-none">{r.name}</span>
+                    
+                    {r.uid === currentUserUid && (
+                      <span className="text-[10px] bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full font-black uppercase">
+                        Tú
+                      </span>
+                    )}
+
+                    {/* MEDALLAS DE GAMIFICACIÓN */}
+                    <div className="flex gap-1.5 ml-1">
+                      {/* Racha (Aparece si tiene 3 o más aciertos consecutivos) */}
+                      {r.currentStreak >= 3 && (
+                        <span 
+                          title={`¡En racha! ${r.currentStreak} aciertos al hilo`} 
+                          className="flex items-center text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded-full text-[10px] font-black"
+                        >
+                          <Flame className="w-3 h-3 mr-0.5 fill-orange-500" /> {r.currentStreak}
+                        </span>
+                      )}
+
+                      {/* Cazagigantes (Aparece si acertó batacazos contra la mayoría) */}
+                      {r.giantKiller > 0 && (
+                        <span 
+                          title={`Cazagigantes: ${r.giantKiller} batacazos acertados`} 
+                          className="flex items-center text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full text-[10px] font-black"
+                        >
+                          <Shield className="w-3 h-3 mr-0.5 fill-indigo-500" /> {r.giantKiller}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </td>
                 <td className="p-4 text-center font-black text-2xl text-emerald-400">{r.points}</td>

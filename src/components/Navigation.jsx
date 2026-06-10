@@ -1,15 +1,16 @@
 import React from 'react';
-import { Calendar, Activity, Settings } from 'lucide-react';
+import { Calendar, Activity, Settings, Medal } from 'lucide-react';
 
-// 1. Agregamos 'user' a los props
 export default function Navigation({ activeTab, setActiveTab, user }) {
   
-  // 2. Filtramos los tabs: mostramos 'admin' solo si el UID coincide
   const tabs = [
     { id: 'fixture', icon: Calendar, label: 'Pronósticos' },
-    { id: 'ranking', icon: Activity, label: 'Tabla General' },
+    { id: 'ranking', icon: Activity, label: 'Tabla' },
+    // 2. Agregamos la nueva pestaña aquí
+    { id: 'candidatos', icon: Medal, label: 'Candidatos' },
+    // El filtro para admin sigue igual
     user?.uid === 'fOz55g8nrCYI8onReC60p8SMX1S2' && { id: 'admin', icon: Settings, label: 'Admin' }
-  ].filter(Boolean); // .filter(Boolean) elimina el 'false' si el usuario no es admin
+  ].filter(Boolean);
 
   return (
     <div className="flex bg-slate-900 p-1 rounded-xl mb-6 shadow-lg border border-slate-800">
@@ -20,16 +21,14 @@ export default function Navigation({ activeTab, setActiveTab, user }) {
           <button 
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-bold text-sm transition-all ${
+            className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 rounded-lg font-bold text-xs transition-all ${
               isActive 
-                ? tab.id === 'admin' 
-                  ? 'bg-slate-700 text-white shadow-md border border-slate-600' 
-                  : 'bg-emerald-500 text-slate-950 shadow-md'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'bg-slate-700 text-white shadow-md border border-slate-600' 
+                : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Icon className="w-4 h-4" /> 
-            <span className="hidden sm:inline">{tab.label}</span>
+            <Icon className="w-5 h-5" />
+            {tab.label}
           </button>
         );
       })}

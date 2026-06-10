@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { onSnapshot, setDoc, doc, writeBatch } from 'firebase/firestore';
-import { db, appId, getPublicCollection } from '../lib/firebase';
+import { onSnapshot, setDoc, doc } from 'firebase/firestore';
+import { db, getPublicCollection } from '../lib/firebase';
 
 // Helper de cálculo de puntos
 const calculateMatchPoints = (predHome, predAway, realHome, realAway) => {
@@ -18,28 +18,43 @@ const calculateMatchPoints = (predHome, predAway, realHome, realAway) => {
   return 0; 
 };
 
+// Helper para parsear la fecha y ordenar los partidos cronológicamente
+const parseDateForSort = (dStr) => {
+  if (!dStr || dStr.includes('definir')) return 0;
+  try {
+    const [datePart, timePart] = dStr.split(' ');
+    const [d, m, y] = datePart.split('/');
+    const [h, min] = timePart.split(':');
+    return new Date(y, m - 1, d, h, min).getTime();
+  } catch (e) {
+    return 0;
+  }
+};
+
+const BONUS_POINTS = { CHAMPION: 10, SCORER: 5, PLAYER: 5 };
+
 export function useProdeData(user) {
   const [usersDb, setUsersDb] = useState({});
   const [matches, setMatches] = useState([]);
   const [allPredictions, setAllPredictions] = useState([]);
   const [myPredictions, setMyPredictions] = useState({});
+  const [allBonusPreds, setAllBonusPreds] = useState({}); 
+  const [myBonusPred, setMyBonusPred] = useState({ champion: '', topScorer: '', bestPlayer: '' });
+  const [tournamentResults, setTournamentResults] = useState({}); 
   const [loadingDb, setLoadingDb] = useState(true);
 
   useEffect(() => {
     if (!user) return;
-
     const unsubUsers = onSnapshot(getPublicCollection('users'), (snap) => {
       const uDict = {};
       snap.forEach(d => uDict[d.id] = d.data());
       setUsersDb(uDict);
     });
-
     const unsubMatches = onSnapshot(getPublicCollection('matches'), (snap) => {
       const m = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       m.sort((a, b) => (a.order || 0) - (b.order || 0));
       setMatches(m);
     });
-
     const unsubPreds = onSnapshot(getPublicCollection('predictions'), (snap) => {
       const p = [];
       const myP = {};
@@ -50,59 +65,41 @@ export function useProdeData(user) {
       });
       setAllPredictions(p);
       setMyPredictions(myP);
+    });
+    const unsubBonus = onSnapshot(getPublicCollection('bonus_predictions'), (snap) => {
+      const b = {};
+      snap.forEach(d => {
+        const data = d.data();
+        b[d.id] = data; 
+        if (d.id === user.uid) setMyBonusPred(data);
+      });
+      setAllBonusPreds(b);
       setLoadingDb(false);
     });
-
-    return () => { unsubUsers(); unsubMatches(); unsubPreds(); };
+    const unsubResults = onSnapshot(doc(getPublicCollection('settings'), 'bonus_results'), (docSnap) => {
+      if (docSnap.exists()) setTournamentResults(docSnap.data());
+    });
+    return () => { unsubUsers(); unsubMatches(); unsubPreds(); unsubBonus(); unsubResults(); };
   }, [user]);
 
-  const ranking = useMemo(() => {
-    if (!matches.length || !Object.keys(usersDb).length) return [];
-    
-    const scores = Object.keys(usersDb).reduce((acc, uid) => {
-      acc[uid] = { ...usersDb[uid], points: 0, exact: 0, trends: 0 };
-      return acc;
-    }, {});
-
-    const finishedMatches = matches.filter(m => m.status === 'finished');
-
-    allPredictions.forEach(pred => {
-      const match = finishedMatches.find(m => m.id === pred.matchId);
-      if (!match || !scores[pred.userId]) return;
-
-      const pts = calculateMatchPoints(pred.homeScore, pred.awayScore, match.realHomeScore, match.realAwayScore);
-      scores[pred.userId].points += pts;
-      if (pts === 3) scores[pred.userId].exact += 1;
-      if (pts === 1) scores[pred.userId].trends += 1;
-    });
-
-    return Object.values(scores).sort((a, b) => b.points !== a.points ? b.points - a.points : b.exact - a.exact);
-  }, [matches, allPredictions, usersDb]);
-
-  // Calculamos el Termómetro de la Comunidad
+  // 1. CALCULAMOS PRIMERO EL TERMÓMETRO (Para saber la opinión de la mayoría)
   const matchStats = useMemo(() => {
     const stats = {};
-    
-    // 1. Contamos los votos
     allPredictions.forEach(pred => {
       if (!stats[pred.matchId]) {
         stats[pred.matchId] = { home: 0, draw: 0, away: 0, total: 0 };
       }
-      
       const home = parseInt(pred.homeScore, 10);
       const away = parseInt(pred.awayScore, 10);
-      
       if (!isNaN(home) && !isNaN(away)) {
         const diff = home - away;
         if (diff > 0) stats[pred.matchId].home += 1;
         else if (diff < 0) stats[pred.matchId].away += 1;
         else stats[pred.matchId].draw += 1;
-        
         stats[pred.matchId].total += 1;
       }
     });
 
-    // 2. Convertimos a porcentajes
     const statsWithPercentages = {};
     Object.keys(stats).forEach(matchId => {
       const s = stats[matchId];
@@ -115,11 +112,113 @@ export function useProdeData(user) {
         };
       }
     });
-    
     return statsWithPercentages;
   }, [allPredictions]);
 
-  // AQUÍ agregamos matchStats a lo que devuelve el hook
-  return { matches, myPredictions, setMyPredictions, ranking, matchStats, loadingDb };
+  // 2. LUEGO CALCULAMOS EL RANKING Y LAS MEDALLAS
+  const ranking = useMemo(() => {
+    if (!matches.length || !Object.keys(usersDb).length) return [];
+    
+    // Inicializamos a los usuarios con los nuevos contadores
+    const scores = Object.keys(usersDb).reduce((acc, uid) => {
+      acc[uid] = { ...usersDb[uid], points: 0, exact: 0, trends: 0, bonusPoints: 0, currentStreak: 0, giantKiller: 0 };
+      return acc;
+    }, {});
 
+    const finishedMatches = matches.filter(m => m.status === 'finished');
+    
+    // Función para saber qué votó la mayoría en un partido
+    const getCommunityTrend = (stats) => {
+      if (!stats) return null;
+      if (stats.home > stats.away && stats.home > stats.draw) return 'home';
+      if (stats.away > stats.home && stats.away > stats.draw) return 'away';
+      if (stats.draw > stats.home && stats.draw > stats.away) return 'draw';
+      return null;
+    };
+
+    // Estructuramos las predicciones por usuario para facilitar la búsqueda
+    const predsByUser = {};
+    allPredictions.forEach(p => {
+      if (!predsByUser[p.userId]) predsByUser[p.userId] = {};
+      predsByUser[p.userId][p.matchId] = p;
+    });
+
+    // A. Sumar puntos generales y buscar Batacazos
+    allPredictions.forEach(pred => {
+      const match = finishedMatches.find(m => m.id === pred.matchId);
+      if (!match || !scores[pred.userId]) return;
+
+      const basePts = calculateMatchPoints(pred.homeScore, pred.awayScore, match.realHomeScore, match.realAwayScore);
+      const finalPts = pred.isJoker ? basePts * 2 : basePts;
+
+      scores[pred.userId].points += finalPts;
+      if (basePts === 3) scores[pred.userId].exact += 1;
+      if (basePts === 1) scores[pred.userId].trends += 1;
+
+      // LÓGICA CAZAGIGANTES: Si acertó, pero la comunidad votó distinto
+      if (basePts > 0) {
+         const mStats = matchStats[match.id];
+         const communityTrend = getCommunityTrend(mStats);
+         const realTrend = (match.realHomeScore - match.realAwayScore) > 0 ? 'home' : (match.realHomeScore - match.realAwayScore) < 0 ? 'away' : 'draw';
+         
+         // Si la comunidad erró la tendencia, y el usuario la pegó
+         if (communityTrend && communityTrend !== realTrend) {
+            scores[pred.userId].giantKiller += 1;
+         }
+      }
+    });
+
+    // B. Calcular la Racha Activa (Cronológica)
+    // Ordenamos los partidos terminados del más reciente al más antiguo
+    const sortedFinished = [...finishedMatches].sort((a, b) => parseDateForSort(b.date) - parseDateForSort(a.date));
+
+    Object.keys(scores).forEach(uid => {
+      let streak = 0;
+      for (const match of sortedFinished) {
+        const pred = predsByUser[uid]?.[match.id];
+        let pts = 0;
+        if (pred) {
+          pts = calculateMatchPoints(pred.homeScore, pred.awayScore, match.realHomeScore, match.realAwayScore);
+        }
+        
+        if (pts > 0) {
+          streak++;
+        } else {
+          // Apenas encuentra un partido sin acertar, se corta la racha actual
+          break; 
+        }
+      }
+      scores[uid].currentStreak = streak;
+    });
+
+    // C. Sumar puntos de Candidatos
+    if (tournamentResults.realChampion || tournamentResults.realTopScorer || tournamentResults.realBestPlayer) {
+      Object.keys(allBonusPreds).forEach(uid => {
+        if (!scores[uid]) return;
+        const userBonus = allBonusPreds[uid];
+        const checkBonus = (userVal, realVal, points) => {
+          if (userVal && realVal && userVal.trim().toLowerCase() === realVal.trim().toLowerCase()) {
+            scores[uid].points += points;
+            scores[uid].bonusPoints += points;
+          }
+        };
+        checkBonus(userBonus.champion, tournamentResults.realChampion, BONUS_POINTS.CHAMPION);
+        checkBonus(userBonus.topScorer, tournamentResults.realTopScorer, BONUS_POINTS.SCORER);
+        checkBonus(userBonus.bestPlayer, tournamentResults.realBestPlayer, BONUS_POINTS.PLAYER);
+      });
+    }
+
+    return Object.values(scores).sort((a, b) => b.points !== a.points ? b.points - a.points : b.exact - a.exact);
+  }, [matches, allPredictions, usersDb, allBonusPreds, tournamentResults, matchStats]);
+
+  const saveBonusPrediction = async (champion, topScorer, bestPlayer) => {
+    if (!user) return;
+    try {
+      const docRef = doc(getPublicCollection('bonus_predictions'), user.uid);
+      await setDoc(docRef, { userId: user.uid, champion, topScorer, bestPlayer, updatedAt: new Date().toISOString() }, { merge: true });
+      return true;
+    } catch (error) { return false; }
+  };
+
+  return { matches, myPredictions, setMyPredictions, ranking, matchStats, loadingDb, myBonusPred, saveBonusPrediction };
 }

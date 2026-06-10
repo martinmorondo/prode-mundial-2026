@@ -14,11 +14,12 @@ import AdminTab from './components/AdminTab';
 import FixtureTab from './components/FixtureTab';
 import LoginScreen from './components/LoginScreen'; 
 import RankingTab from './components/RankingTab';
+import { CandidatesTab } from './components/CandidatesTab';
 
 // --- COMPONENTE PRINCIPAL (ORQUESTADOR) ---
 export default function ProdeLaRondaApp() {
   const { user, userProfile, setUserProfile, loginWithEmail, registerWithEmail, loadingAuth } = useAuth();
-  const { matches, myPredictions, setMyPredictions, ranking, loadingDb } = useProdeData(user);
+  const { matches, myPredictions, setMyPredictions, ranking, loadingDb, myBonusPred, saveBonusPrediction } = useProdeData(user);
   
   const [activeTab, setActiveTab] = useState('fixture');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -49,19 +50,68 @@ export default function ProdeLaRondaApp() {
   };
 
   const handlePredictionChange = (matchId, field, value) => {
-    const val = parseInt(value, 10);
-    setMyPredictions(prev => ({
-      ...prev, [matchId]: { ...prev[matchId], [field]: isNaN(val) ? '' : val }
-    }));
+    setMyPredictions(prev => {
+      // Si el campo es el comodín, guardamos el true/false directamente sin convertirlo a número
+      if (field === 'isJoker') {
+        return {
+          ...prev, 
+          [matchId]: { ...prev[matchId], [field]: value }
+        };
+      }
+      
+      // Si son los goles, mantenemos la lógica anterior de convertir a número entero
+      const val = parseInt(value, 10);
+      return {
+        ...prev, 
+        [matchId]: { ...prev[matchId], [field]: isNaN(val) ? '' : val }
+      };
+    });
   };
 
   const savePrediction = async (matchId) => {
+    // --- Validar tiempo antes de guardar ---
+    const match = matches.find(m => m.id === matchId);
+    if (!match) return;
+
+    if (match.status === 'finished') {
+      alert("¡Este partido ya finalizó!");
+      return;
+    }
+
+    if (match.date && !match.date.toLowerCase().includes('definir')) {
+      try {
+        const [datePart, timePart] = match.date.split(' ');
+        if (datePart && timePart) {
+          const [d, m, y] = datePart.split('/');
+          const [h, min] = timePart.split(':');
+          
+          // Parseamos como UTC
+          const matchDate = new Date(Date.UTC(y, m - 1, d, h, min));
+          
+          // Bloqueamos 1 hora antes (currentTime >= matchDate - 1h)
+          const cutoffTime = new Date(matchDate.getTime() - (60 * 60 * 1000));
+          
+          if (new Date() >= cutoffTime) {
+            alert("¡El tiempo para pronosticar este partido ha finalizado!");
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("Error en validación de tiempo:", e);
+      }
+    }
+
     const pred = myPredictions[matchId];
     if (!pred || pred.homeScore === '' || pred.awayScore === '') return;
     try {
       const predId = `${user.uid}_${matchId}`;
       const payload = {
-        userId: user.uid, matchId, homeScore: parseInt(pred.homeScore,10), awayScore: parseInt(pred.awayScore,10), timestamp: new Date().toISOString()
+        userId: user.uid, 
+        matchId, 
+        homeScore: parseInt(pred.homeScore, 10), 
+        awayScore: parseInt(pred.awayScore, 10), 
+        isJoker: !!pred.isJoker,  
+        timestamp: new Date().toISOString()
       };
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'predictions', predId), payload);
     } catch (e) {
@@ -83,7 +133,9 @@ export default function ProdeLaRondaApp() {
   if (!user) {
     return <LoginScreen onAuthAction={handleAuthAction} isSaving={isSavingProfile} />;
   }
-console.log("Estado actual:", { loadingDb, userProfile, user });
+  
+  // console.log("Estado actual:", { loadingDb, userProfile, user });
+  
   if (loadingDb || !userProfile) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-emerald-400 font-mono">
@@ -99,20 +151,36 @@ console.log("Estado actual:", { loadingDb, userProfile, user });
       <Header userProfile={userProfile} />
       <main className="max-w-4xl mx-auto p-4 mt-4">
         <Navigation 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab}
-        user={user} 
+          activeTab={activeTab} 
+          setActiveTab={setActiveTab}
+          user={user} 
         />
+        
+        {/* Pestañas corregidas y sin duplicar */}
         {activeTab === 'fixture' && (
           <FixtureTab matches={matches} myPredictions={myPredictions} handlePredictionChange={handlePredictionChange} savePrediction={savePrediction} />
         )}
-        {activeTab === 'ranking' && <RankingTab ranking={ranking} currentUserUid={user.uid} />}
-        {activeTab === 'admin' && user.uid === 'fOz55g8nrCYI8onReC60p8SMX1S2' && <AdminTab matches={matches} />}
+        
+        {activeTab === 'ranking' && (
+          <RankingTab ranking={ranking} currentUserUid={user.uid} />
+        )}
+
+        {activeTab === 'candidatos' && (
+          <CandidatesTab 
+            myBonusPred={myBonusPred} 
+            saveBonusPrediction={saveBonusPrediction} 
+          />
+        )}
+        
+        {activeTab === 'admin' && user.uid === 'fOz55g8nrCYI8onReC60p8SMX1S2' && (
+          <AdminTab matches={matches} />
+        )}
+        
         {activeTab === 'admin' && user.uid !== 'fOz55g8nrCYI8onReC60p8SMX1S2' && (
-        <div className="text-center p-10 text-slate-500">
-          🚫 Acceso denegado. Solo para administradores.
-        </div>
-)}
+          <div className="text-center p-10 text-slate-500">
+            🚫 Acceso denegado. Solo para administradores.
+          </div>
+        )}
       </main>
     </div>
   );

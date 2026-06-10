@@ -22,26 +22,33 @@ export default function FixtureTab({ matches, myPredictions, handlePredictionCha
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300 slide-in-from-bottom-4">
-      {Object.entries(groupedMatches).map(([group, groupMatches]) => (
-        <div key={group} className="space-y-4">
-          <h2 className="text-emerald-400 font-black text-xl uppercase tracking-widest flex items-center gap-2">
-            <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
-            {group}
-          </h2>
-          <div className="grid gap-4 md:grid-cols-2">
-            {groupMatches.map(match => (
-              <MatchCard 
-                key={match.id} 
-                match={match} 
-                prediction={myPredictions[match.id]} 
-                onPredictionChange={handlePredictionChange}
-                onSavePrediction={savePrediction}
-                stats={matchStats ? matchStats[match.id] : null}
-              />
-            ))}
+      {Object.entries(groupedMatches).map(([group, groupMatches]) => {
+        // Verificamos si ya hay un comodín usado en este grupo
+        const jokerMatch = groupMatches.find(m => myPredictions[m.id]?.isJoker === true);
+        const activeJokerMatchId = jokerMatch ? jokerMatch.id : null;
+
+        return (
+          <div key={group} className="space-y-4">
+            <h2 className="text-emerald-400 font-black text-xl uppercase tracking-widest flex items-center gap-2">
+              <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
+              {group}
+            </h2>
+            <div className="grid gap-4 md:grid-cols-2">
+              {groupMatches.map(match => (
+                <MatchCard 
+                  key={match.id} 
+                  match={match} 
+                  prediction={myPredictions[match.id]} 
+                  onPredictionChange={handlePredictionChange}
+                  onSavePrediction={savePrediction}
+                  stats={matchStats ? matchStats[match.id] : null}
+                  activeJokerMatchId={activeJokerMatchId} // Se lo pasamos a la tarjeta
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
