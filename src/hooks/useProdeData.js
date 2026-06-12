@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { onSnapshot, setDoc, doc } from 'firebase/firestore';
+import { onSnapshot, setDoc, doc, getDocs, query, where } from 'firebase/firestore';
 import { db, getPublicCollection } from '../lib/firebase';
 
 // ==========================================
@@ -49,13 +49,12 @@ const parseMatchDate = (dStr) => {
       const isoDate = new Date(cleanStr);
       if (!isNaN(isoDate)) return isoDate;
 
-      // Fallback manual 
       if (cleanStr.includes(' ')) {
         const [datePart, timePart] = cleanStr.split(' ');
         const parts = datePart.split(/[-/]/);
         if (parts.length >= 3) {
           let [y, m, d] = parts[0].length === 4 ? parts : [parts[2], parts[1], parts[0]];
-          if (parseInt(m, 10) > 12) [d, m] = [m, d]; // Ajuste defensivo (US format)
+          if (parseInt(m, 10) > 12) [d, m] = [m, d]; 
           const fallbackDate = new Date(`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}T${timePart}Z`);
           if (!isNaN(fallbackDate)) return fallbackDate;
         }
@@ -86,12 +85,14 @@ export function useProdeData(user) {
   useEffect(() => {
     if (!user) return;
     
-    const unsubUsers = onSnapshot(getPublicCollection('users'), snap => {
+    // --- 1. USUARIOS: DESCARGA ÚNICA (AHORRO) ---
+    getDocs(getPublicCollection('users')).then(snap => {
       const uDict = {};
       snap.forEach(d => uDict[d.id] = d.data());
       setUsersDb(uDict);
     });
     
+    // --- 2. PARTIDOS: EN TIEMPO REAL CON ORDEN BLINDADO ---
     const unsubMatches = onSnapshot(getPublicCollection('matches'), (snap) => {
       const m = snap.docs.map(d => {
         const data = d.data();
@@ -103,7 +104,6 @@ export function useProdeData(user) {
         };
       });
 
-      // --- ORDENAMIENTO SEMÁNTICO DE GRUPOS ---
       const orderMap = {
         "GRUPO A": 1, "GRUPO B": 2, "GRUPO C": 3, "GRUPO D": 4,
         "GRUPO E": 5, "GRUPO F": 6, "GRUPO G": 7, "GRUPO H": 8,
@@ -115,29 +115,31 @@ export function useProdeData(user) {
         const orderA = orderMap[a.group] || 99;
         const orderB = orderMap[b.group] || 99;
         
-        // Si tienen el mismo grupo, ordenamos por fecha
         if (orderA === orderB) {
           return parseDateForSort(a.date) - parseDateForSort(b.date);
         }
-        // Si son grupos distintos, usamos el orden lógico
         return orderA - orderB;
       });
 
       setMatches(m);
     });
 
-    const unsubPreds = onSnapshot(getPublicCollection('predictions'), snap => {
+    // --- 3. PREDICCIONES DE LA COMUNIDAD: DESCARGA ÚNICA (EL GRAN AHORRO) ---
+    getDocs(getPublicCollection('predictions')).then(snap => {
       const p = [];
-      const myP = {};
-      snap.forEach(d => {
-        const data = d.data();
-        p.push(data);
-        if (data.userId === user.uid) myP[data.matchId] = data;
-      });
+      snap.forEach(d => p.push(d.data()));
       setAllPredictions(p);
+    });
+
+    // --- 4. TUS PREDICCIONES: EN TIEMPO REAL (RÁPIDO Y BARATO) ---
+    const qMyPreds = query(getPublicCollection('predictions'), where('userId', '==', user.uid));
+    const unsubMyPreds = onSnapshot(qMyPreds, snap => {
+      const myP = {};
+      snap.forEach(d => myP[d.data().matchId] = d.data());
       setMyPredictions(myP);
     });
     
+    // --- 5. BONUS: EN TIEMPO REAL (Pocos documentos) ---
     const unsubBonus = onSnapshot(getPublicCollection('bonus_predictions'), snap => {
       const b = {};
       snap.forEach(d => {
@@ -153,13 +155,19 @@ export function useProdeData(user) {
       if (docSnap.exists()) setTournamentResults(docSnap.data());
     });
     
-    return () => { unsubUsers(); unsubMatches(); unsubPreds(); unsubBonus(); unsubResults(); };
+    return () => { unsubMatches(); unsubMyPreds(); unsubBonus(); unsubResults(); };
   }, [user]);
 
-  // Cálculos memorizados
+  // --- MERGE: Combinamos la BD estática con tus cambios en vivo para que todo cuadre ---
+  const mergedPredictions = useMemo(() => {
+    const staticOthers = allPredictions.filter(p => p.userId !== user?.uid);
+    return [...staticOthers, ...Object.values(myPredictions)];
+  }, [allPredictions, myPredictions, user]);
+
+  // Cálculos memorizados (Reemplazamos allPredictions por mergedPredictions)
   const matchStats = useMemo(() => {
     const stats = {};
-    allPredictions.forEach(({ matchId, homeScore, awayScore }) => {
+    mergedPredictions.forEach(({ matchId, homeScore, awayScore }) => {
       if (!stats[matchId]) stats[matchId] = { home: 0, draw: 0, away: 0, total: 0 };
       
       const home = parseInt(homeScore, 10);
@@ -186,7 +194,7 @@ export function useProdeData(user) {
       }
     }
     return percentages;
-  }, [allPredictions]);
+  }, [mergedPredictions]);
 
   const ranking = useMemo(() => {
     if (!matches.length || !Object.keys(usersDb).length) return [];
@@ -199,12 +207,12 @@ export function useProdeData(user) {
     const finishedMatches = matches.filter(m => m.status === 'finished');
     const predsByUser = {};
     
-    allPredictions.forEach(p => {
+    mergedPredictions.forEach(p => {
       if (!predsByUser[p.userId]) predsByUser[p.userId] = {};
       predsByUser[p.userId][p.matchId] = p;
     });
 
-    allPredictions.forEach(pred => {
+    mergedPredictions.forEach(pred => {
       const match = finishedMatches.find(m => m.id === pred.matchId);
       if (!match || !scores[pred.userId]) return;
 
@@ -255,7 +263,7 @@ export function useProdeData(user) {
     }
 
     return Object.values(scores).sort((a, b) => b.points !== a.points ? b.points - a.points : b.exact - a.exact);
-  }, [matches, allPredictions, usersDb, allBonusPreds, tournamentResults, matchStats]);
+  }, [matches, mergedPredictions, usersDb, allBonusPreds, tournamentResults, matchStats]);
 
   const saveBonusPrediction = async (champion, topScorer, bestPlayer) => {
     if (!user) return false;

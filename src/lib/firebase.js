@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore, collection, doc } from "firebase/firestore";
+import { getFirestore, collection, doc, enableIndexedDbPersistence } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -16,6 +16,16 @@ const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+// --- BLINDAJE DE COSTOS: ACTIVACIÓN DE CACHÉ OFFLINE ---
+enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') {
+        console.warn("Múltiples pestañas abiertas, caché compartida no disponible.");
+    } else if (err.code === 'unimplemented') {
+        console.warn("El navegador no soporta caché offline.");
+    }
+});
+
 export const appId = typeof __app_id !== 'undefined' ? __app_id : 'prode-la-ronda-01';
 
 export const getPublicCollection = (collectionName) => 
